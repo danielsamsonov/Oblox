@@ -3,8 +3,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const {MAX_ASSET,MAX_GAME_ASSETS,MAX_USER_ASSETS}=require('./asset_validation');
 const MAX_BYTES = 32 * 1024 * 1024;
-const USER_ASSET_BYTES=128*1024*1024, GLOBAL_ASSET_BYTES=512*1024*1024, GAME_ASSET_BYTES=32*1024*1024;
+const USER_ASSET_BYTES=MAX_USER_ASSETS, GLOBAL_ASSET_BYTES=512*1024*1024, GAME_ASSET_BYTES=MAX_GAME_ASSETS;
 const USER_ASSET_COUNT=512,GLOBAL_ASSET_COUNT=4096;
 const assetError=(message,status=400,code='invalid_asset')=>{const e=new Error(message);e.status=status;e.code=code;throw e;};
 const assetPublic=(a,name)=>({id:a.id,kind:a.kind,name:name||a.name,format:a.format,size:Number(a.size)});
@@ -57,7 +58,7 @@ function jsonStore() {
   const assetDirectory=path.join(directory,'assets');fs.mkdirSync(assetDirectory,{recursive:true});
   const assetIndexFile=path.join(assetDirectory,'index.json');
   let assetIndex=fs.existsSync(assetIndexFile)?JSON.parse(fs.readFileSync(assetIndexFile,'utf8')):{};
-  if(!assetIndex||typeof assetIndex!=='object'||Array.isArray(assetIndex)||Object.entries(assetIndex).some(([id,a])=>!a||a.id!==id||!/^[a-f0-9]{64}$/.test(id)||!['texture','sound','model'].includes(a.kind)||!Number.isInteger(a.size)||a.size<1||a.size>8388608||!a.owners||typeof a.owners!=='object'||Array.isArray(a.owners)))throw new Error('Invalid asset index; restore its backup instead of resetting assets.');
+  if(!assetIndex||typeof assetIndex!=='object'||Array.isArray(assetIndex)||Object.entries(assetIndex).some(([id,a])=>!a||a.id!==id||!/^[a-f0-9]{64}$/.test(id)||!['texture','sound','model'].includes(a.kind)||!Number.isInteger(a.size)||a.size<1||a.size>MAX_ASSET||!a.owners||typeof a.owners!=='object'||Array.isArray(a.owners)))throw new Error('Invalid asset index; restore its backup instead of resetting assets.');
   function persistAssets(index){const temporary=assetIndexFile+'.tmp';const fd=fs.openSync(temporary,'w',0o600);try{fs.writeFileSync(fd,JSON.stringify(index));fs.fsyncSync(fd);}finally{fs.closeSync(fd);}fs.renameSync(temporary,assetIndexFile);assetIndex=index;}
   return sequential({kind:'json', ready:Promise.resolve(state),
     async run(operation) {
@@ -79,7 +80,7 @@ function jsonStore() {
           const entry=previous||{...asset,owners:{}};entry.owners[userId]=asset.name;draft[asset.id]=entry;assetsDirty=true;return assetPublic(entry,asset.name);
         },
         async getAsset(assetId,userId,includeData=true){const entry=draft[assetId];if(!allowed(entry,userId))assetError('Asset not found.',404,'not_found');return {...assetPublic(entry,entry.owners[userId]),mime:entry.mime,...(includeData?{data:fs.readFileSync(path.join(assetDirectory,assetId+'.bin'))}:{})};},
-        async validateAssets(refs,userId){let bytes=0;return refs.map(ref=>{const entry=draft[ref.id];if(!allowed(entry,userId))assetError('A referenced asset has not been uploaded or is private.',400,'asset_missing');if(entry.kind!==ref.kind)assetError('Referenced asset type does not match.');bytes+=entry.size;if(bytes>GAME_ASSET_BYTES)assetError('A game may reference at most 32 MiB of assets.',413,'asset_quota');return assetPublic(entry,entry.owners[userId]);});},
+        async validateAssets(refs,userId){let bytes=0;return refs.map(ref=>{const entry=draft[ref.id];if(!allowed(entry,userId))assetError('A referenced asset has not been uploaded or is private.',400,'asset_missing');if(entry.kind!==ref.kind)assetError('Referenced asset type does not match.');bytes+=entry.size;if(bytes>GAME_ASSET_BYTES)assetError('A game may reference at most 200 MiB of assets.',413,'asset_quota');return assetPublic(entry,entry.owners[userId]);});},
         async setGameAssets(){},
       };
       const result = await operation(next,context);
@@ -103,7 +104,7 @@ function postgresStore(connectionString) {
   for (const key of ['sslmode','sslcert','sslkey','sslrootcert']) url.searchParams.delete(key);
   const {Pool} = require('pg');
   const pool = new Pool({connectionString:url.toString(),ssl,max:2,idleTimeoutMillis:10000,
-    connectionTimeoutMillis:15000,query_timeout:15000,application_name:'oblox-community'});
+    connectionTimeoutMillis:15000,query_timeout:60000,application_name:'oblox-community'});
   // Idle connection loss is recoverable on the next request and must not print
   // provider connection strings, usernames, query parameters, or database contents.
   pool.on('error',() => console.error('Community database connection interrupted.'));
@@ -134,7 +135,14 @@ function postgresStore(connectionString) {
       await client.query('CREATE TABLE IF NOT EXISTS oblox_community (singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton), state jsonb NOT NULL, revision bigint NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now())');
       await client.query('ALTER TABLE oblox_community ADD COLUMN IF NOT EXISTS revision bigint NOT NULL DEFAULT 0');
       await client.query('CREATE TABLE IF NOT EXISTS oblox_game_payloads (game_id text PRIMARY KEY,creation jsonb NOT NULL)');
-      await client.query('CREATE TABLE IF NOT EXISTS oblox_assets (id text PRIMARY KEY,kind text NOT NULL,format text NOT NULL,name text NOT NULL,mime text NOT NULL,size integer NOT NULL CHECK(size>0 AND size<=8388608),data bytea NOT NULL,created_at timestamptz NOT NULL DEFAULT now())');
+      await client.query('CREATE TABLE IF NOT EXISTS oblox_assets (id text PRIMARY KEY,kind text NOT NULL,format text NOT NULL,name text NOT NULL,mime text NOT NULL,size integer NOT NULL CHECK(size>0 AND size<=52428800),data bytea NOT NULL,created_at timestamptz NOT NULL DEFAULT now())');
+      // Widen the previous 8 MiB constraint in the same startup transaction.
+      // Existing account, game and asset rows are preserved; later startups do no DDL.
+      const assetConstraint=await client.query("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='oblox_assets'::regclass AND conname='oblox_assets_size_check'");
+      if(!assetConstraint.rowCount||!assetConstraint.rows[0].definition.includes(String(MAX_ASSET))){
+        await client.query('ALTER TABLE oblox_assets DROP CONSTRAINT IF EXISTS oblox_assets_size_check');
+        await client.query('ALTER TABLE oblox_assets ADD CONSTRAINT oblox_assets_size_check CHECK(size>0 AND size<=52428800)');
+      }
       await client.query('CREATE TABLE IF NOT EXISTS oblox_asset_owners (asset_id text NOT NULL REFERENCES oblox_assets(id),user_id text NOT NULL,name text NOT NULL,PRIMARY KEY(asset_id,user_id))');
       await client.query('CREATE TABLE IF NOT EXISTS oblox_game_assets (game_id text NOT NULL,asset_id text NOT NULL REFERENCES oblox_assets(id),PRIMARY KEY(game_id,asset_id))');
       await client.query('INSERT INTO oblox_community (singleton,state) VALUES (true,$1::jsonb) ON CONFLICT (singleton) DO NOTHING',[encode(fresh())]);
@@ -187,12 +195,14 @@ function postgresStore(connectionString) {
           await client.query('INSERT INTO oblox_asset_owners(asset_id,user_id,name) VALUES($1,$2,$3) ON CONFLICT(asset_id,user_id) DO UPDATE SET name=EXCLUDED.name',[asset.id,userId,asset.name]);return assetPublic(asset);
         },
         async getAsset(assetId,userId,includeData=true){
-          const result=await client.query('SELECT a.id,a.kind,a.format,a.name,a.mime,a.size'+(includeData?',a.data':'')+' FROM oblox_assets a WHERE a.id=$1 AND '+assetAllowedSql,[assetId,userId||'']);
-          if(!result.rowCount)assetError('Asset not found.',404,'not_found');const a=result.rows[0];return {...assetPublic(a),mime:a.mime,...(includeData?{data:a.data}:{})};
+          // Base64 avoids the text bytea format's doubled wire size, while keeping
+          // arbitrary non-UTF8 bytes intact with pg's text protocol.
+          const result=await client.query('SELECT a.id,a.kind,a.format,a.name,a.mime,a.size'+(includeData?",encode(a.data,'base64') AS asset_bytes":'')+' FROM oblox_assets a WHERE a.id=$1 AND '+assetAllowedSql,[assetId,userId||'']);
+          if(!result.rowCount)assetError('Asset not found.',404,'not_found');const a=result.rows[0];return {...assetPublic(a),mime:a.mime,...(includeData?{data:Buffer.from(a.asset_bytes,'base64')}:{})};
         },
         async validateAssets(refs,userId){
           if(!refs.length)return [];const result=await client.query('SELECT a.id,a.kind,a.format,a.name,a.size FROM oblox_assets a WHERE a.id=ANY($1::text[]) AND '+assetAllowedSql,[refs.map(r=>r.id),userId]);const byId=new Map(result.rows.map(a=>[a.id,a]));let bytes=0;
-          return refs.map(ref=>{const a=byId.get(ref.id);if(!a)assetError('A referenced asset has not been uploaded or is private.',400,'asset_missing');if(a.kind!==ref.kind)assetError('Referenced asset type does not match.');bytes+=Number(a.size);if(bytes>GAME_ASSET_BYTES)assetError('A game may reference at most 32 MiB of assets.',413,'asset_quota');return assetPublic(a);});
+          return refs.map(ref=>{const a=byId.get(ref.id);if(!a)assetError('A referenced asset has not been uploaded or is private.',400,'asset_missing');if(a.kind!==ref.kind)assetError('Referenced asset type does not match.');bytes+=Number(a.size);if(bytes>GAME_ASSET_BYTES)assetError('A game may reference at most 200 MiB of assets.',413,'asset_quota');return assetPublic(a);});
         },
         async setGameAssets(gameId,ids){await client.query('DELETE FROM oblox_game_assets WHERE game_id=$1',[gameId]);if(ids.length)await client.query('INSERT INTO oblox_game_assets(game_id,asset_id) SELECT $1,unnest($2::text[])',[gameId,ids]);}
         };

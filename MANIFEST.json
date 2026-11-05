@@ -1,5 +1,5 @@
 {
-  "version": "2.2.0",
+  "version": "2.2.1",
   "hosting": "Render Free + Neon Free",
   "files": [
     {
@@ -8,7 +8,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "b1d939357e7a6468f588f3676e5260208f59c4449b7df170e902400fa65d65b8"
+      "sha256": "2424ccbd7a7826ad8f3bd13b3ba628593de4a75eeae10c9604c669aa40d15d87"
     },
     {
       "path": "render.yaml",
@@ -20,11 +20,11 @@
     },
     {
       "path": "server/asset_validation.js",
-      "sha256": "2163a9e413cfde93ea37c30e012db8d3f5cb1ef97309e43c2e5e84c2ff70c7e4"
+      "sha256": "faabcbe6138a0988bf196a61ada980c1f8bb288221f9078c7c397114c1d4eb6c"
     },
     {
       "path": "server/binary_body.js",
-      "sha256": "5328eeec396b191adc0266d68ede11d2d25c2ef202093cde2b3a52f56fa5d8c1"
+      "sha256": "74e1b52162e8fb8ac2ef0904dc436a4e4200ba2b8dd6c37fbc5cb79e8d7a688c"
     },
     {
       "path": "server/bundles.js",
@@ -36,15 +36,15 @@
     },
     {
       "path": "server/CLOUD_DEPLOY_RU.md",
-      "sha256": "b1d939357e7a6468f588f3676e5260208f59c4449b7df170e902400fa65d65b8"
+      "sha256": "2424ccbd7a7826ad8f3bd13b3ba628593de4a75eeae10c9604c669aa40d15d87"
     },
     {
       "path": "server/community.js",
-      "sha256": "4967fec9751e52fc7f3df8546900283f0017e3402780695f9de8364c17c43fc8"
+      "sha256": "8aa9963367c279e6afe6ffd831a3446ed17ae81b7dd8c48cc4066a5893659749"
     },
     {
       "path": "server/community_store.js",
-      "sha256": "426b58a19d6bf64fcec7aeac1ea6e4c311418872f60e770f4d804501823d1b15"
+      "sha256": "acd36ad967ae9d2d182cbc5665bc58ec8e4cb0147f43abed8cbbdb412edf4b30"
     },
     {
       "path": "server/discovery.js",
@@ -60,11 +60,11 @@
     },
     {
       "path": "server/package-lock.json",
-      "sha256": "34bc3682d50ddf599d3b4ae84fd04ad0ea472f5715977ed28736be6d7ea4d963"
+      "sha256": "8eeb3340566f6fbc03bae5dab6bbcb56f1728575d34a63edf46cab481c5d3b1a"
     },
     {
       "path": "server/package.json",
-      "sha256": "1071bda103cceedca9fad0bdc25af162f6cfb20a487a9d3e2501854ed84e89d2"
+      "sha256": "e942e965824a70073137c469806d9c779c6fa8036f22982d7a36e2a7a8a57d67"
     },
     {
       "path": "server/payments.js",
@@ -72,11 +72,11 @@
     },
     {
       "path": "server/README.md",
-      "sha256": "e70eb1ebbfee96960ba01ce13c9f246a4a9fb7f47879ab53edf8e48fe8420b10"
+      "sha256": "a6b11070cf7f3eca2d40ccbff41e4d6a4ce11af74ab6985b3de09e216306b088"
     },
     {
       "path": "server/server.js",
-      "sha256": "9e908424188fe06326a3e1328ff3e7013d69531ac422ed499bad779c69931dcf"
+      "sha256": "2d8f403d88fc16662849a54e3fc793f09d46fdf19c52601be43a50d0cc7d2fd2"
     },
     {
       "path": "server/store_lock.js",
@@ -84,7 +84,7 @@
     },
     {
       "path": "server/test_assets.js",
-      "sha256": "cb47fd8fc3bcb88a86d372e01739a02dc2ac795c853cb33fcc89a93676ede89a"
+      "sha256": "31a13b155627d3e7c5ea2b2254f912eaac1a2f4ae24270d433ddd0e13808bffe"
     },
     {
       "path": "server/test_client.js",
@@ -93,6 +93,10 @@
     {
       "path": "server/test_community.js",
       "sha256": "5453e0df89ca73f54e00c86c8927d95f3556c1e0498af36ded7ab2c792d1e7ff"
+    },
+    {
+      "path": "server/test_mp3_assets.js",
+      "sha256": "70e6a44520aa8b5753c2252c9ae1d138951a4f545e2f60f33386f57987b43a0a"
     },
     {
       "path": "server/test_pg_metrics.js",

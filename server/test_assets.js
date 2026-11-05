@@ -35,7 +35,7 @@ if(require.main===module)(async()=>{
   try{
     if(pgUrl){const{Client}=require('pg');admin=new Client({connectionString:pgUrl});await admin.connect();await admin.query('DROP TABLE IF EXISTS oblox_game_assets,oblox_asset_owners,oblox_assets,oblox_game_payloads,oblox_community CASCADE');}
     await start();const a=await api('POST','/api/auth/register',{username:'AssetAuthor',password:'StrongFixturePassword'});const b=await api('POST','/api/auth/register',{username:'AssetVisitor',password:'StrongFixturePassword'});
-    await upload(png(),'texture',undefined,401);await upload(Buffer.from('extends Node'),'model',a.token,400);await upload(glb(true),'model',a.token,400);await upload(png(4096,1),'texture',a.token,400);await upload(Buffer.alloc(8*1024*1024+1),'sound',a.token,413);
+    await upload(png(),'texture',undefined,401);await upload(Buffer.from('extends Node'),'model',a.token,400);await upload(glb(true),'model',a.token,400);await upload(png(4096,1),'texture',a.token,400);await upload(Buffer.alloc(require('./asset_validation').MAX_ASSET+1),'sound',a.token,413);
     const malformedModels=[
       packGlb({asset:{version:'2.0'},nodes:[{children:[0]}]}),
       packGlb({asset:{version:'2.0'},nodes:Array.from({length:33},(_,n)=>n===32?{}:{children:[n+1]})}),

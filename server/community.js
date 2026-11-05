@@ -112,7 +112,7 @@ module.exports = function createCommunity({ clients }) {
       let match;
       if(req.method==='POST'&&route==='/api/assets'){
         const user=requireUser(req);rate('upload:'+user.id,120);
-        const asset=validateAsset(req.assetBody,url.searchParams.get('kind'),url.searchParams.get('name'));
+        const asset=req.assetInfo;
         const stored=await transaction.putAsset(user.id,asset,req.assetBody);send(res,200,{asset:stored});return true;
       }
       match=route.match(/^\/api\/assets\/([a-f0-9]{64})$/);
@@ -237,7 +237,12 @@ module.exports = function createCommunity({ clients }) {
     // Read/limit incoming bodies before obtaining a database lock. A slow client
     // cannot hold up every player's registration or publication transaction.
     if (req.method === 'POST') {
-      try { if(url.pathname==='/api/assets')req.assetBody=await readBinary(req,MAX_ASSET);else req.communityBody = await body(req); }
+      try {
+        if(url.pathname==='/api/assets'){
+          req.assetBody=await readBinary(req,MAX_ASSET);
+          req.assetInfo=validateAsset(req.assetBody,url.searchParams.get('kind'),url.searchParams.get('name'));
+        }else req.communityBody = await body(req);
+      }
       catch (error) { send(res,error.status || 400,{error:error.message,error_code:error.code || 'invalid_fields'}); return true; }
     }
     try {
@@ -263,19 +268,44 @@ module.exports = function createCommunity({ clients }) {
     }
     return true;
   }
-  let uploadsInFlight=0;
+  // Only one large transfer holds a body/BLOB at a time on the free 512 MiB host.
+  // Queued requests remain paused; ordinary account/game APIs keep working.
+  let transferActive=false;
+  const transferQueue=[];
+  function transferRelease(){
+    let released=false;
+    return ()=>{
+      if(released)return;released=true;
+      while(transferQueue.length){const next=transferQueue.shift();next.res.off('close',next.cancel);if(!next.res.destroyed){next.resolve(transferRelease());return;}}
+      transferActive=false;
+    };
+  }
+  function acquireTransfer(res){
+    if(res.destroyed)return Promise.resolve(null);
+    if(!transferActive){transferActive=true;return Promise.resolve(transferRelease());}
+    if(transferQueue.length>=16)fail('The file transfer queue is full. Try again shortly.',429);
+    return new Promise(resolve=>{
+      const entry={res,resolve,cancel:()=>{const i=transferQueue.indexOf(entry);if(i>=0)transferQueue.splice(i,1);resolve(null);}};
+      transferQueue.push(entry);res.once('close',entry.cancel);
+    });
+  }
+  function responseFinished(res){
+    if(res.writableFinished||res.destroyed)return Promise.resolve();
+    return new Promise(resolve=>{const done=()=>{res.off('finish',done);res.off('close',done);resolve();};res.once('finish',done);res.once('close',done);});
+  }
   async function handle(req,res,url){
     const upload=req.method==='POST'&&url.pathname==='/api/assets';
-    if(upload&&uploadsInFlight>=2){send(res,429,{error:'Another upload is in progress. Try again shortly.',error_code:'rate_limited'});req.resume();return true;}
-    if(upload)uploadsInFlight++;
+    const transfer=upload||(req.method==='GET'&&/^\/api\/assets\/[a-f0-9]{64}$/.test(url.pathname));
+    let release;
     try{
       if(upload){
         rate('upload_request:'+clientAddress(req),300);
         const owner=await store.run(state=>{db=state;try{return{commit:true,dirty:false,value:authenticate(tokenOf(req),false)?.id||''};}finally{db=undefined;}});
         if(!owner){send(res,401,{error:'Sign in to your server account first.',error_code:'session_expired'});req.resume();return true;}
       }
+      if(transfer){release=await acquireTransfer(res);if(!release){req.resume();return true;}}
       return await handleTransaction(req,res,url);
-    }catch(error){if(!error.status)console.error('Asset upload authorization storage failed.');send(res,error.status||503,{error:error.status?error.message:'Server storage is temporarily unavailable. Try again later.',error_code:error.code||'storage_error'});req.resume();return true;}finally{if(upload)uploadsInFlight--;}
+    }catch(error){if(!error.status)console.error('Asset transfer failed.');send(res,error.status||503,{error:error.status?error.message:'Server storage is temporarily unavailable. Try again later.',error_code:error.code||'storage_error'});req.resume();return true;}finally{if(release){await responseFinished(res);release();}}
   }
   async function checkHello(token, name, world) {
     return store.run((state) => {

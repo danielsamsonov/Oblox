@@ -1,6 +1,10 @@
 const crypto=require('node:crypto');
 const zlib=require('node:zlib');
-const MAX_ASSET=8*1024*1024, MAX_TEXTURE=4*1024*1024;
+const MAX_ASSET=50*1024*1024, MAX_TEXTURE=4*1024*1024, MAX_AUDIO_SECONDS=3600;
+const MAX_GAME_ASSETS=200*1024*1024, MAX_USER_ASSETS=256*1024*1024;
+const MP3_BITRATES_HIGH=[0,32,40,48,56,64,80,96,112,128,160,192,224,256,320];
+const MP3_BITRATES_LOW=[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160];
+const MP3_SAMPLE_RATES=[44100,48000,32000];
 function fail(message,status=400,code='invalid_asset'){const e=new Error(message);e.status=status;e.code=code;throw e;}
 function dimension(w,h){if(!Number.isInteger(w)||!Number.isInteger(h)||w<1||h<1||w>2048||h>2048)fail('Textures must be at most 2048 by 2048 pixels.');}
 function png(data){
@@ -31,14 +35,47 @@ function wav(data){
     if(type==='fmt '){if(length<16)fail('Invalid WAV format.');const encoding=data.readUInt16LE(pos);channels=data.readUInt16LE(pos+2);rate=data.readUInt32LE(pos+4);bits=data.readUInt16LE(pos+14);if(![1,3].includes(encoding)||(encoding===3&&bits!==32)||channels<1||channels>2||rate<8000||rate>192000||![8,16,24,32].includes(bits))fail('WAV must contain mono or stereo PCM audio.');format=true;}
     if(type==='data'){samples=length>0;bytes+=length;}pos+=length+(length%2);
   }
-  if(!format||!samples||bytes/(rate*channels*bits/8)>600)fail('Invalid or excessively long WAV audio.');return true;
+  if(!format||!samples||bytes/(rate*channels*bits/8)>MAX_AUDIO_SECONDS)fail('Invalid or excessively long WAV audio.');return true;
 }
 function ogg(data){
   if(data.length<58||data.toString('ascii',0,4)!=='OggS')return false;let pos=0,sampleRate=0,first=true;
   while(pos<data.length){if(pos+27>data.length||data.toString('ascii',pos,pos+4)!=='OggS'||data[pos+4]!==0)fail('Invalid Ogg stream.');const count=data[pos+26];if(pos+27+count>data.length)fail('Invalid Ogg page.');let length=0;for(let n=0;n<count;n++)length+=data[pos+27+n];const payload=pos+27+count;if(payload+length>data.length)fail('Invalid Ogg data.');
     if(first){if(length<30||data[payload]!==1||data.toString('ascii',payload+1,payload+7)!=='vorbis')fail('Only Ogg Vorbis audio is supported.');const channels=data[payload+11];sampleRate=data.readUInt32LE(payload+12);if(channels<1||channels>2||sampleRate<8000||sampleRate>192000)fail('Ogg must contain mono or stereo Vorbis audio.');first=false;}
-    const granule=data.readBigUInt64LE(pos+6);if(granule!==0xffffffffffffffffn&&granule>BigInt(sampleRate*600))fail('Audio must be at most ten minutes long.');pos=payload+length;
+    const granule=data.readBigUInt64LE(pos+6);if(granule!==0xffffffffffffffffn&&granule>BigInt(sampleRate*MAX_AUDIO_SECONDS))fail('Audio must be at most one hour long.');pos=payload+length;
   }return !first;
+}
+// Check complete MPEG Layer III framing; file extensions and ID3 alone are not audio.
+function mp3(data){
+  let pos=0,end=data.length,frames=0,seconds=0,stream;
+  if(data.toString('ascii',0,3)==='ID3'){
+    if(data.length<10||![2,3,4].includes(data[3])||data[4]===255)fail('Invalid MP3 ID3 header.');
+    let length=0;for(let n=6;n<10;n++){if(data[n]&128)fail('Invalid MP3 tag length.');length=length*128+data[n];}
+    pos=10+length;
+    if(data[3]===4&&(data[5]&16)){if(pos+10>end||data.toString('ascii',pos,pos+3)!=='3DI')fail('Invalid MP3 tag footer.');pos+=10;}
+    if(pos>=end)fail('MP3 file contains tags but no audio.');
+  }
+  if(end-pos>=128&&data.toString('ascii',end-128,end-125)==='TAG')end-=128;
+  if(end-pos>=32&&data.toString('ascii',end-32,end-24)==='APETAGEX'){
+    const length=data.readUInt32LE(end-20);if(length<32||length>end-pos)fail('Invalid MP3 APE tag.');end-=length;
+    if(end-pos>=32&&data.toString('ascii',end-32,end-24)==='APETAGEX')end-=32;
+  }
+  while(pos+4<=end){
+    // Encoder padding after the last complete frame is allowed, bounded to 64 KiB.
+    if(data[pos]===0&&end-pos<=65536){for(let n=pos;n<end;n++)if(data[n]!==0)fail('Invalid MP3 trailing bytes.');pos=end;break;}
+    const a=data[pos],b=data[pos+1],c=data[pos+2],d=data[pos+3];
+    const version=(b>>3)&3,layer=(b>>1)&3,bitrateIndex=c>>4,rateIndex=(c>>2)&3;
+    if(a!==255||(b&224)!==224||version===1||layer!==1||bitrateIndex===0||bitrateIndex===15||rateIndex===3)fail('Invalid MP3 audio frame.');
+    const table=version===3?MP3_BITRATES_HIGH:MP3_BITRATES_LOW;
+    const rate=MP3_SAMPLE_RATES[rateIndex]/(version===3?1:version===2?2:4),channels=(d>>6)===3?1:2;
+    const identity=version+':'+rate+':'+channels;if(stream&&stream!==identity)fail('MP3 stream format changes between frames.');stream=identity;
+    const length=Math.floor((version===3?144000:72000)*table[bitrateIndex]/rate)+((c>>1)&1);
+    const side=(version===3?(channels===1?17:32):(channels===1?9:17))+4+((b&1)?0:2);
+    if(length<side||pos+length>end)fail('Truncated MP3 audio frame.');
+    seconds+=(version===3?1152:576)/rate;if(seconds>MAX_AUDIO_SECONDS)fail('Audio must be at most one hour long.');
+    pos+=length;frames++;
+  }
+  if(pos!==end||frames<2)fail('MP3 needs at least two complete audio frames.');
+  return true;
 }
 function glb(data){
   if(data.length<20||data.toString('ascii',0,4)!=='glTF')return false;
@@ -83,14 +120,14 @@ function glb(data){
   return true;
 }
 function validateAsset(data,kind,name){
-  if(!Buffer.isBuffer(data)||!data.length||data.length>MAX_ASSET)fail('File must be between 1 byte and 8 MiB.',413,'payload_too_large');if(!['texture','sound','model'].includes(kind))fail('Choose texture, sound or model.');
+  if(!Buffer.isBuffer(data)||!data.length||data.length>MAX_ASSET)fail('File must be between 1 byte and 50 MiB.',413,'payload_too_large');if(!['texture','sound','model'].includes(kind))fail('Choose texture, sound or model.');
   let format,mime;
   try{
     if(kind==='texture'){if(data.length>MAX_TEXTURE)fail('Texture must be at most 4 MiB.',413,'payload_too_large');if(png(data)){format='png';mime='image/png';}else if(jpeg(data)){format='jpg';mime='image/jpeg';}}
-    if(kind==='sound'){if(wav(data)){format='wav';mime='audio/wav';}else if(ogg(data)){format='ogg';mime='audio/ogg';}}
+    if(kind==='sound'){if(wav(data)){format='wav';mime='audio/wav';}else if(ogg(data)){format='ogg';mime='audio/ogg';}else if((data[0]===255&&(data[1]&224)===224)||data.toString('ascii',0,3)==='ID3'){mp3(data);format='mp3';mime='audio/mpeg';}}
     if(kind==='model'&&glb(data)){format='glb';mime='model/gltf-binary';}
   }catch(e){if(e.status)throw e;fail('Invalid media file.');}
-  if(!format)fail('Unsupported file format. Use PNG/JPEG, WAV/Ogg Vorbis or embedded GLB.');
+  if(!format)fail('Unsupported file format. Use PNG/JPEG, MP3/WAV/Ogg Vorbis or embedded GLB.');
   return {id:crypto.createHash('sha256').update(data).digest('hex'),kind,name:String(name||'My asset').replace(/[\u0000-\u001f<>/\\]/g,'').slice(0,100).trim()||'My asset',format,size:data.length,mime};
 }
-module.exports={validateAsset,MAX_ASSET};
+module.exports={validateAsset,MAX_ASSET,MAX_TEXTURE,MAX_GAME_ASSETS,MAX_USER_ASSETS};

@@ -6,7 +6,7 @@ const pay = require("./payments");
 const community = require("./community")({ clients: () => wss.clients });
 const readBody = require("./http_body");
 const startDiscovery = require("./discovery");
-const BUILD = "2.2.0";
+const BUILD = "2.2.1";
 let storageReady = false;
 community.ready.then(() => {storageReady = true;}, () => {
   console.error("Oblox community storage startup failed. Check DATABASE_URL and database availability.");
@@ -107,7 +107,8 @@ function html(res, code, text) {
 function health() {
   return { service: "oblox-community", version: 2, build: BUILD, ready:storageReady && community.isHealthy(), storage:community.storageKind, instance_id: community.instanceId(),
     port: server.address() ? server.address().port : PORT, ws_path: "/ws",
-    capabilities: ["accounts", "friends", "published_games", "rooms", "lan_discovery", "custom_assets", "visual_code_v2"] };
+    max_asset_bytes:50*1024*1024,max_game_asset_bytes:200*1024*1024,
+    capabilities: ["accounts", "friends", "published_games", "rooms", "lan_discovery", "custom_assets", "visual_code_v2", "mp3_audio"] };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -158,7 +159,7 @@ const server = http.createServer(async (req, res) => {
     if (!res.headersSent && !res.destroyed) json(res, e.status || 400, { error: e.status ? e.message : "bad request", error_code: e.code || "invalid_request" });
   }
 });
-server.requestTimeout = 30000;
+server.requestTimeout = 300000;
 server.headersTimeout = 15000;
 
 // ------------------------------------------------------------------ WebSocket game rooms
