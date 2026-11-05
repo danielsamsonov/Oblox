@@ -8,14 +8,9 @@ const NAME_RE = /^[A-Za-z0-9_]{3,20}$/;
 const ID_RE = /^[a-f0-9]{24}$/;
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
-const PARTS = new Set(['block','sphere','cylinder','wedge','kill','coin','pad','checkpoint','spawn','finish','teleport','tree','pine','rock','crate','lamp','light','sign']);
-const ACTIONS = new Set(['coins','damage','heal','kill','bounce','teleport','message','toggle','spin','move','show_ui','hide_ui','sound','music','win']);
-const MATERIALS = new Set(['plastic','neon','glass','metal','wood','ice','smooth']);
-const SOUNDS = new Set(['coin','jump','win','checkpoint','pad','boom','thunder','alarm','buy','oof']);
-const TRACKS = new Set(['menu','lobby','isles','obby','city','lava','rush','disaster']);
-const UI_KINDS = new Set(['text','button','panel','icon','coins','timer','health']);
-const SKIES = new Set(['day','night','sunset']);
-const GENRES = new Set(['Obby','Adventure','Roleplay','Survival','Arcade']);
+const {validateWorld,collectReferences}=require('./world_validation');
+const {validateAsset,MAX_ASSET}=require('./asset_validation');
+const readBinary=require('./binary_body');
 const hash = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const id = () => crypto.randomBytes(12).toString('hex');
 const text = (s, limit = 100) => String(s == null ? '' : s).replace(/[\u0000-\u001f<>]/g, '').slice(0, limit).trim();
@@ -26,94 +21,6 @@ function fail(message, status = 400, code) {
   throw e;
 }
 function object(v) { return v && typeof v === 'object' && !Array.isArray(v); }
-function number(v, min, max, fallback) {
-  if (v === undefined && fallback !== undefined) return fallback;
-  if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max) fail('number outside supported range');
-  return v;
-}
-function vector(v, fallback, min = -10000, max = 10000) {
-  if (v === undefined) return fallback;
-  if (!Array.isArray(v) || v.length !== 3) fail('vector must contain three numbers');
-  return v.map((n) => number(n, min, max));
-}
-function color(v, fallback) {
-  if (v === undefined) return fallback;
-  if (typeof v !== 'string' || !/^(?:[a-f0-9]{6}|[a-f0-9]{8})$/i.test(v)) fail('invalid color');
-  return v.toLowerCase();
-}
-function enumValue(v, choices, fallback) {
-  if (v === undefined) return fallback;
-  if (!choices.has(v)) fail('unsupported value: ' + text(v, 40));
-  return v;
-}
-function list(v, max, fallback = []) {
-  if (v === undefined) return fallback;
-  if (!Array.isArray(v) || v.length > max) fail('too many items');
-  return v;
-}
-function boolean(v, fallback) {
-  if (v === undefined) return fallback;
-  if (typeof v !== 'boolean') fail('expected a boolean');
-  return v;
-}
-function validateWorld(raw) {
-  if (!object(raw)) fail('creation must be an object');
-  const title = text(raw.title, 80);
-  if (!title) fail('add a title before publishing');
-  const parts = list(raw.parts, 1000);
-  if (!parts.length || !parts.some((p) => object(p) && p.t === 'spawn')) fail('add a Spawn before publishing');
-  let actionCount = 0;
-  const actions = (a) => list(a, 16).map((item) => {
-    if (!object(item) || !ACTIONS.has(item.a)) fail('unsupported action');
-    if (++actionCount > 2000) fail('too many actions');
-    const out = { a: item.a };
-    if (['coins','damage','heal','bounce','spin','move'].includes(item.a)) out.n = number(item.n, -10000, 10000, item.a === 'move' ? 2 : 1);
-    if (item.a === 'move') out.xyz = vector(item.xyz, [0,4,0], -1000, 1000);
-    if (['teleport','toggle'].includes(item.a)) out.target = text(item.target, 64);
-    if (['show_ui','hide_ui'].includes(item.a)) out.ui = text(item.ui, 64);
-    if (item.a === 'message') out.text = text(item.text, 300);
-    if (item.a === 'sound') out.sound = enumValue(item.sound, SOUNDS, 'coin');
-    if (item.a === 'music') out.track = enumValue(item.track, TRACKS, 'menu');
-    return out;
-  });
-  const names = new Set();
-  const sanitizedParts = parts.map((p, i) => {
-    if (!object(p) || !PARTS.has(p.t)) fail('unsupported part');
-    const name = text(p.name, 64) || 'Part' + (i + 1);
-    if (names.has(name)) fail('part names must be unique');
-    names.add(name);
-    const out = {t: p.t, name, p: vector(p.p, [0,0,0]), folder: text(p.folder, 64),
-      rot: p.rot === undefined ? [0, number(p.r, -36000, 36000, 0), 0] : vector(p.rot, [0,0,0], -36000, 36000),
-      anchored: boolean(p.anchored, true), collide: boolean(p.collide, true), alpha: number(p.alpha, 0, 1, 1)};
-    if (p.s !== undefined) out.s = vector(p.s, undefined, 0.1, 512);
-    if (p.c !== undefined) out.c = color(p.c);
-    if (p.mat !== undefined) out.mat = enumValue(p.mat, MATERIALS);
-    if (p.t === 'sign') out.text = text(p.text, 300);
-    if (p.t === 'light') out.n = number(p.n, 0, 20, 2);
-    if (p.t === 'teleport') out.target = text(p.target, 64);
-    out.events = list(p.events, 16).map((ev) => {
-      if (!object(ev) || !['touch','start','timer'].includes(ev.on)) fail('unsupported event');
-      const result = {on: ev.on, do: actions(ev.do)};
-      if (ev.on === 'timer') result.every = number(ev.every, 0.25, 86400, 2);
-      return result;
-    });
-    return out;
-  });
-  const uiIds = new Set();
-  const ui = list(raw.ui, 100).map((el, i) => {
-    if (!object(el) || !UI_KINDS.has(el.k)) fail('unsupported UI element');
-    const elementId = text(el.id, 64) || 'UI' + (i + 1);
-    if (uiIds.has(elementId)) fail('UI ids must be unique');
-    uiIds.add(elementId);
-    return {id: elementId, k: el.k, x: number(el.x, -1600, 3200, 0), y: number(el.y, -900, 1800, 0),
-      w: number(el.w, 8, 3200, 200), h: number(el.h, 8, 1800, 60), text: text(el.text, 1000),
-      size: number(el.size, 8, 160, 24), color: color(el.color, 'ffffff'), bg: color(el.bg, '00000000'),
-      radius: number(el.radius, 0, 100, 12), visible: boolean(el.visible, true), click: actions(el.click)};
-  });
-  return {title, desc: text(raw.desc === undefined ? raw.description : raw.desc, 2000), parts: sanitizedParts,
-    ui, folders: list(raw.folders, 100).map((f) => text(f, 64)), sky: enumValue(raw.sky, SKIES, 'day'),
-    music: enumValue(raw.music, TRACKS, 'isles'), genre: enumValue(raw.genre, GENRES, 'Obby'), published: true};
-}
 
 module.exports = function createCommunity({ clients }) {
   const store = require('./community_store')();
@@ -162,7 +69,7 @@ module.exports = function createCommunity({ clients }) {
       author: creator ? creator.username : 'Creator', creator: creator ? creator.username : 'Creator', author_id: game.author_id,
       revision: game.revision, published_at: game.published_at, updated_at: game.updated_at,
       genre: game.creation.genre, category: game.creation.genre, world: 'creation', published: true,
-      code: 'U' + game.id.slice(0,7).toUpperCase(), rating: 0, playing, part_count: game.part_count === undefined ? game.creation.parts.length : game.part_count};
+      code: 'U' + game.id.slice(0,7).toUpperCase(), rating: 0, playing, thumbnail_asset:game.creation.thumbnail_asset || '', part_count: game.part_count === undefined ? game.creation.parts.length : game.part_count};
   }
   function friendLists(user) {
     const friendIds = db.friends.filter((p) => p.split(':').includes(user.id)).map((p) => p.split(':').find((a) => a !== user.id));
@@ -197,12 +104,26 @@ module.exports = function createCommunity({ clients }) {
   }
   async function dispatch(req, res, url, transaction, afterCommit) {
     const route = url.pathname;
-    if (!/^\/api\/(auth|users|friends|games|presence)(\/|$)/.test(route)) return false;
+    if (!/^\/api\/(auth|users|friends|games|presence|assets)(\/|$)/.test(route)) return false;
     try {
       if (req.method === 'OPTIONS') { send(res, 200, {}); return true; }
       const remote = clientAddress(req);
       rate('http:' + remote, 300);
       let match;
+      if(req.method==='POST'&&route==='/api/assets'){
+        const user=requireUser(req);rate('upload:'+user.id,120);
+        const asset=validateAsset(req.assetBody,url.searchParams.get('kind'),url.searchParams.get('name'));
+        const stored=await transaction.putAsset(user.id,asset,req.assetBody);send(res,200,{asset:stored});return true;
+      }
+      match=route.match(/^\/api\/assets\/([a-f0-9]{64})$/);
+      if(match&&(req.method==='GET'||req.method==='HEAD')){
+        const viewer=authenticate(tokenOf(req),false);
+        const asset=await transaction.getAsset(match[1],viewer?.id,false);
+        const headers={'Content-Type':asset.mime,'Content-Length':String(asset.size),'ETag':'"'+asset.id+'"','Cache-Control':'private, max-age=31536000, immutable','X-Content-Type-Options':'nosniff','Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'ETag, Content-Length'};
+        if(req.headers['if-none-match']===headers.ETag){delete headers['Content-Length'];res.writeHead(304,headers);res.end();return true;}
+        if(req.method==='HEAD'){res.writeHead(200,headers);res.end();return true;}
+        const content=await transaction.getAsset(match[1],viewer?.id,true);res.writeHead(200,headers);res.end(content.data);return true;
+      }
       if (req.method === 'POST' && ['/api/auth/register', '/api/auth/login'].includes(route)) {
         rate('auth:' + remote, 20);
         const d = await body(req);
@@ -278,6 +199,7 @@ module.exports = function createCommunity({ clients }) {
         const user = requireUser(req); rate('publish:' + user.id, 20);
         const d = await body(req); const source = object(d.creation) ? d.creation : d;
         const creation = validateWorld(source);
+        creation.assets=await transaction.validateAssets(collectReferences(creation),user.id);
         const existingId = text(source.published_id || source.remote_id || (db.games[source.id] ? source.id : ''),24);
         let game = existingId ? db.games[existingId] : null;
         if (existingId && !game) fail('Published game not found.', 404);
@@ -287,6 +209,7 @@ module.exports = function createCommunity({ clients }) {
         if (!game) game = {id:id(), author_id:user.id, revision:0, published_at:now};
         creation.id = game.id; creation.published_id = game.id; creation.author_id = user.id;
         game.creation = creation; game.part_count = creation.parts.length; game.updated_at = now; game.revision++;
+        await transaction.setGameAssets(game.id,creation.assets.map(a=>a.id));
         db.games[game.id] = game; save();
         send(res, 200, {game:metadata(game), creation}); return true;
       }
@@ -309,12 +232,12 @@ module.exports = function createCommunity({ clients }) {
     }
     return true;
   }
-  async function handle(req, res, url) {
-    if (!/^\/api\/(auth|users|friends|games|presence)(\/|$)/.test(url.pathname)) return false;
+  async function handleTransaction(req, res, url) {
+    if (!/^\/api\/(auth|users|friends|games|presence|assets)(\/|$)/.test(url.pathname)) return false;
     // Read/limit incoming bodies before obtaining a database lock. A slow client
     // cannot hold up every player's registration or publication transaction.
     if (req.method === 'POST') {
-      try { req.communityBody = await body(req); }
+      try { if(url.pathname==='/api/assets')req.assetBody=await readBinary(req,MAX_ASSET);else req.communityBody = await body(req); }
       catch (error) { send(res,error.status || 400,{error:error.message,error_code:error.code || 'invalid_fields'}); return true; }
     }
     try {
@@ -339,6 +262,20 @@ module.exports = function createCommunity({ clients }) {
       send(res,503,{error:'Server storage is temporarily unavailable. Try again later.',error_code:'storage_error'});
     }
     return true;
+  }
+  let uploadsInFlight=0;
+  async function handle(req,res,url){
+    const upload=req.method==='POST'&&url.pathname==='/api/assets';
+    if(upload&&uploadsInFlight>=2){send(res,429,{error:'Another upload is in progress. Try again shortly.',error_code:'rate_limited'});req.resume();return true;}
+    if(upload)uploadsInFlight++;
+    try{
+      if(upload){
+        rate('upload_request:'+clientAddress(req),300);
+        const owner=await store.run(state=>{db=state;try{return{commit:true,dirty:false,value:authenticate(tokenOf(req),false)?.id||''};}finally{db=undefined;}});
+        if(!owner){send(res,401,{error:'Sign in to your server account first.',error_code:'session_expired'});req.resume();return true;}
+      }
+      return await handleTransaction(req,res,url);
+    }catch(error){if(!error.status)console.error('Asset upload authorization storage failed.');send(res,error.status||503,{error:error.status?error.message:'Server storage is temporarily unavailable. Try again later.',error_code:error.code||'storage_error'});req.resume();return true;}finally{if(upload)uploadsInFlight--;}
   }
   async function checkHello(token, name, world) {
     return store.run((state) => {

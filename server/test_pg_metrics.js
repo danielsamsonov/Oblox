@@ -2,7 +2,7 @@
 // SQL parameters, credentials, or connection strings. Not used by npm start.
 const pg = require('pg');
 const original = pg.Client.prototype.query;
-const metrics = {coreReads:0,payloadReads:0,revisionReads:0,rowBytes:0};
+const metrics = {coreReads:0,payloadReads:0,revisionReads:0,assetBlobReads:0,rowBytes:0};
 pg.Client.prototype.query = function(...args) {
   const result = original.apply(this,args);
   if (!result || typeof result.then !== 'function') return result;
@@ -10,6 +10,7 @@ pg.Client.prototype.query = function(...args) {
   return result.then((response) => {
     if (/^SELECT state(?:,| FROM)/.test(sql)) metrics.coreReads++;
     if (/^SELECT creation FROM/.test(sql)) metrics.payloadReads++;
+    if (/FROM oblox_assets/.test(sql) && /\ba\.data\b|SELECT data|SELECT \*/.test(sql)) metrics.assetBlobReads++;
     if (/^SELECT revision FROM/.test(sql)) metrics.revisionReads++;
     metrics.rowBytes += Buffer.byteLength(JSON.stringify(response.rows));
     return response;

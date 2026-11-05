@@ -7,6 +7,7 @@ module.exports = function readBody(req, limit = 2 * 1024 * 1024) {
     function fail(message, status, code) {
       if (finished) return;
       finished = true;
+      chunks.length = 0;
       const error = new Error(message); error.status = status; error.code = code; reject(error);
     }
     req.on('data', (chunk) => {
