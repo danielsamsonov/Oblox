@@ -195,16 +195,16 @@ wss.on("connection", (c) => {
       } finally {c.joining = false;}
       if (c.readyState !== 1 || c.id) return;
       const account = result.account;
-      if (d.token && !account) return send(c, { t: "error", code: "auth", error_code: "session_expired", text: "Your session expired. Sign in again." }), c.close();
+      if (d.token && !account) return send(c, { t: "error", code: "auth", error_code: "session_expired", text: "Your session expired. Sign in again." }), c.close(4001, "Your session expired. Sign in again.");
       let name = account ? account.username : clean(d.name, 20);
       if (!NAME_RE.test(name) || !ROOM_RE.test(world)) return send(c, { t: "error", text: "bad hello" }), c.close();
-      if (!result.canJoin) return send(c, { t: "error", code: "not_found", text: "This game is not published on this server." }), c.close();
+      if (!result.canJoin) return send(c, { t: "error", code: "not_found", text: "This game is not published on this server." }), c.close(4004, "This game is not published on this server.");
       // Guests cannot take the name of a registered player.
       if (!account && result.registeredName) name = "Guest_" + name;
       const n = pickServer(world, Math.floor(num(d.server, 100)));
       if (!n) {
         const text = d.server ? "That server is full. Try another one." : "All servers of this game are full.";
-        return send(c, { t: "error", code: "full", text }), c.close();
+        return send(c, { t: "error", code: "full", text }), c.close(4002, text);
       }
       c.id = nextId++;
       clearTimeout(helloTimeout);

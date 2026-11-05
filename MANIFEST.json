@@ -8,7 +8,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "3b3af0d8e832a5a576b62f929c71cdb7a6c0d6694254aa0e56daa61a97356e9f"
+      "sha256": "944d76349f18bfbe884c7843a21203683bd6d4e1857bc09d055995f854de2257"
     },
     {
       "path": "render.yaml",
@@ -28,7 +28,7 @@
     },
     {
       "path": "server/CLOUD_DEPLOY_RU.md",
-      "sha256": "3b3af0d8e832a5a576b62f929c71cdb7a6c0d6694254aa0e56daa61a97356e9f"
+      "sha256": "944d76349f18bfbe884c7843a21203683bd6d4e1857bc09d055995f854de2257"
     },
     {
       "path": "server/community.js",
@@ -64,11 +64,11 @@
     },
     {
       "path": "server/README.md",
-      "sha256": "874c6a1217a275d0b84d0ca5a07cc756199ad24a37879d1c79a9593da6b11843"
+      "sha256": "31115205aed3d811883b2dd8227f778afe396855fdad7a90fbbb1766fd6cce01"
     },
     {
       "path": "server/server.js",
-      "sha256": "1f7286d50da7a43a0863f3321de2c7fca929e2bb938fccd83ad489334b8e2d7d"
+      "sha256": "116f8dce7561a1d963ad2e73248366e68d6f686f2cbc1c88e404211b025bc3b2"
     },
     {
       "path": "server/store_lock.js",
