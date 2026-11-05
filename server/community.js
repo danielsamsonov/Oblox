@@ -1,7 +1,4 @@
-// Account, friends and published-world API. One server process owns an atomic JSON store.
-// OBLOX_DATA_DIR must point to persistent storage when hosting; never put it under public files.
-const fs = require('fs');
-const path = require('path');
+// Accounts, friends and published worlds use atomic JSON locally or PostgreSQL in the cloud.
 const crypto = require('crypto');
 const readBody = require('./http_body');
 const clientAddress = require('./client_address');
@@ -119,35 +116,12 @@ function validateWorld(raw) {
 }
 
 module.exports = function createCommunity({ clients }) {
-  const directory = path.resolve(process.env.OBLOX_DATA_DIR || path.join(__dirname, 'data'));
-  fs.mkdirSync(directory, {recursive: true});
-  const releaseStore = require('./store_lock')(directory);
-  const filename = path.join(directory, 'community.json');
-  let db = {version: 1, users: {}, sessions: {}, friends: [], requests: [], games: {}};
-  if (fs.existsSync(filename)) {
-    db = JSON.parse(fs.readFileSync(filename, 'utf8'));
-    if (db.version !== 1 || !object(db.users) || !object(db.sessions) || !Array.isArray(db.friends) || !Array.isArray(db.requests) || !object(db.games)) {
-      throw new Error('Invalid community store; restore its backup instead of resetting player data.');
-    }
-  }
+  const store = require('./community_store')();
+  let db, dirty = false, instanceId = '';
+  const ready = store.ready.then((state) => { instanceId = state.instance_id; });
   const presence = new Map();
   const rateLimits = new Map();
-  let persisted = JSON.stringify(db);
-  function save() {
-    const temporary = filename + '.tmp';
-    const encoded = JSON.stringify(db);
-    try {
-      const fd = fs.openSync(temporary, 'w', 0o600);
-      try { fs.writeFileSync(fd, encoded); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-      fs.renameSync(temporary, filename);
-      persisted = encoded;
-    } catch (error) {
-      db = JSON.parse(persisted);
-      throw error;
-    }
-  }
-  // Add a stable server identity while preserving every existing account and publication.
-  if (typeof db.instance_id !== 'string' || !ID_RE.test(db.instance_id)) { db.instance_id = id(); save(); }
+  function save() { dirty = true; }
   function rate(key, limit, windowMs = 60000) {
     const now = Date.now();
     let r = rateLimits.get(key);
@@ -188,7 +162,7 @@ module.exports = function createCommunity({ clients }) {
       author: creator ? creator.username : 'Creator', creator: creator ? creator.username : 'Creator', author_id: game.author_id,
       revision: game.revision, published_at: game.published_at, updated_at: game.updated_at,
       genre: game.creation.genre, category: game.creation.genre, world: 'creation', published: true,
-      code: 'U' + game.id.slice(0,7).toUpperCase(), rating: 0, playing, part_count: game.creation.parts.length};
+      code: 'U' + game.id.slice(0,7).toUpperCase(), rating: 0, playing, part_count: game.part_count === undefined ? game.creation.parts.length : game.part_count};
   }
   function friendLists(user) {
     const friendIds = db.friends.filter((p) => p.split(':').includes(user.id)).map((p) => p.split(':').find((a) => a !== user.id));
@@ -197,6 +171,7 @@ module.exports = function createCommunity({ clients }) {
       outgoing: db.requests.filter((r) => r.from === user.id).map((r) => publicUser(db.users[r.to], user))};
   }
   async function body(req) {
+    if (req.communityBody !== undefined) return req.communityBody;
     const raw = await readBody(req);
     let value;
     try { value = JSON.parse(raw || '{}'); } catch { fail('Invalid JSON.', 400, 'invalid_json'); }
@@ -220,7 +195,7 @@ module.exports = function createCommunity({ clients }) {
     save();
     return {token, user: publicUser(user, user), expires_at: Date.now() + SESSION_MS};
   }
-  async function handle(req, res, url) {
+  async function dispatch(req, res, url, transaction, afterCommit) {
     const route = url.pathname;
     if (!/^\/api\/(auth|users|friends|games|presence)(\/|$)/.test(route)) return false;
     try {
@@ -253,7 +228,7 @@ module.exports = function createCommunity({ clients }) {
       if (req.method === 'POST' && route === '/api/auth/logout') {
         const user = requireUser(req); const token = tokenOf(req);
         delete db.sessions[hash(token)]; presence.delete(user.id); save();
-        for (const c of clients()) if (c.session_hash === hash(token)) c.close(1000, 'Signed out');
+        afterCommit.push(() => {for (const c of clients()) if (c.session_hash === hash(token)) c.close(1000, 'Signed out');});
         send(res, 200, {ok:true}); return true;
       }
       if (req.method === 'POST' && route === '/api/presence') {
@@ -311,7 +286,7 @@ module.exports = function createCommunity({ clients }) {
         const now = Date.now();
         if (!game) game = {id:id(), author_id:user.id, revision:0, published_at:now};
         creation.id = game.id; creation.published_id = game.id; creation.author_id = user.id;
-        game.creation = creation; game.updated_at = now; game.revision++;
+        game.creation = creation; game.part_count = creation.parts.length; game.updated_at = now; game.revision++;
         db.games[game.id] = game; save();
         send(res, 200, {game:metadata(game), creation}); return true;
       }
@@ -319,7 +294,7 @@ module.exports = function createCommunity({ clients }) {
       if (match && req.method === 'GET') {
         const game = db.games[match[1]];
         if (!game) fail('Published game not found.', 404);
-        send(res, 200, {game:metadata(game),creation:game.creation}); return true;
+        send(res, 200, {game:metadata(game),creation:await transaction.loadCreation(game.id)}); return true;
       }
       if (match && req.method === 'DELETE') {
         const user = requireUser(req); const game = db.games[match[1]];
@@ -329,12 +304,64 @@ module.exports = function createCommunity({ clients }) {
       }
       send(res, 404, {error:'Not found.', error_code:'not_found'});
     } catch (e) {
-      if (!e.status) console.error('Community API:', e.message);
+      if (!e.status) console.error('Community API operation failed.');
       send(res, e.status || 500, {error: e.status ? e.message : 'Server storage error. Try again later.', error_code:e.status ? e.code : 'storage_error'});
     }
     return true;
   }
-  return {handle, authenticate, instanceId: () => db.instance_id, releaseStore,
-    canJoinWorld: (world) => !world.startsWith('creation:') || (ID_RE.test(world.slice(9)) && Object.hasOwn(db.games, world.slice(9))),
-    isRegisteredName: (name) => Object.values(db.users).some((u) => u.username.toLowerCase() === name.toLowerCase()), hashToken: hash};
+  async function handle(req, res, url) {
+    if (!/^\/api\/(auth|users|friends|games|presence)(\/|$)/.test(url.pathname)) return false;
+    // Read/limit incoming bodies before obtaining a database lock. A slow client
+    // cannot hold up every player's registration or publication transaction.
+    if (req.method === 'POST') {
+      try { req.communityBody = await body(req); }
+      catch (error) { send(res,error.status || 400,{error:error.message,error_code:error.code || 'invalid_fields'}); return true; }
+    }
+    try {
+      const afterCommit = [];
+      const response = await store.run(async (state,transaction) => {
+        db = state; dirty = false;
+        let buffered;
+        const target = {destroyed:false,writableEnded:false,
+          writeHead(status,headers) {buffered = {status,headers};},
+          end(value) {buffered.body = value; this.writableEnded = true;}};
+        try {
+          await dispatch(req,target,url,transaction,afterCommit);
+          return {commit:buffered.status < 400,dirty,value:buffered};
+        } finally {db = undefined;}
+      });
+      if (response.status < 400) for (const action of afterCommit) {
+        try {action();} catch {console.error('Community post-commit notification failed.');}
+      }
+      if (!res.destroyed && !res.writableEnded) {res.writeHead(response.status,response.headers);res.end(response.body);}
+    } catch {
+      console.error('Community storage transaction failed.');
+      send(res,503,{error:'Server storage is temporarily unavailable. Try again later.',error_code:'storage_error'});
+    }
+    return true;
+  }
+  async function checkHello(token, name, world) {
+    return store.run((state) => {
+      db = state;
+      try {
+        const account = token ? authenticate(token) : null;
+        const canJoin = !world.startsWith('creation:') || (ID_RE.test(world.slice(9)) && Object.hasOwn(db.games,world.slice(9)));
+        const registeredName = Object.values(db.users).some((u) => u.username.toLowerCase() === name.toLowerCase());
+        return {commit:true,dirty:false,value:{account,canJoin,registeredName}};
+      } finally {db = undefined;}
+    });
+  }
+  let recovery, recoveryAt = 0;
+  async function checkHealth() {
+    if (store.isHealthy()) return true;
+    if (!recovery && Date.now() - recoveryAt >= 10000) {
+      recoveryAt = Date.now();
+      recovery = store.run((state) => ({commit:true,dirty:false,value:state.instance_id}))
+        .then((value) => {instanceId = value;}, () => {})
+        .finally(() => {recovery = undefined;});
+    }
+    if (recovery) await recovery;
+    return store.isHealthy();
+  }
+  return {handle, checkHello, ready, checkHealth, isHealthy:store.isHealthy, storageKind:store.kind, instanceId:() => instanceId, releaseStore:() => store.close(), hashToken:hash};
 };

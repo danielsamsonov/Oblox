@@ -1,18 +1,20 @@
 {
   "name": "oblox-server",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Oblox online server: accounts, friends, published games, rooms, chat and checkout orders",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
     "test": "node test_community.js && node test_runtime.js",
-    "test:legacy": "node test_client.js"
+    "test:legacy": "node test_client.js",
+    "test:postgres": "node test_postgres.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "ws": "8.18.0"
+    "pg": "8.23.1",
+    "ws": "8.22.1"
   }
 }

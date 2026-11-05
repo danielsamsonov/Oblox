@@ -12,7 +12,7 @@ const sockets = [];
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function start() {
   processServer = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
-    env: {...process.env, PORT: '0', HOST: '127.0.0.1', OBLOX_DISCOVERY_PORT:'0', OBLOX_DATA_DIR: directory}, stdio: ['ignore', 'pipe', 'pipe', 'ipc']
+    env: {...process.env, DATABASE_URL:'', OBLOX_REQUIRE_DATABASE:'0', PORT: '0', HOST: '127.0.0.1', OBLOX_DISCOVERY_PORT:'0', OBLOX_DATA_DIR: directory}, stdio: ['ignore', 'pipe', 'pipe', 'ipc']
   });
   await new Promise((resolve, reject) => {
     let output = '';

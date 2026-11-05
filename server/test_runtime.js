@@ -21,7 +21,7 @@ async function launch(env, reusePid = false) {
   const script = path.join(__dirname,'server.js');
   const seed = 'const fs=require("node:fs"),path=require("node:path");const p=path.join(process.env.OBLOX_DATA_DIR,"server.lock");const old=JSON.parse(fs.readFileSync(p,"utf8"));old.pid=process.pid;fs.writeFileSync(p,JSON.stringify(old));require(process.argv[1]);';
   const child = spawn(process.execPath,reusePid ? ['-e',seed,script] : [script],{
-    env:{...process.env,PORT:'0',HOST:'127.0.0.1',OBLOX_DATA_DIR:data,OBLOX_DISCOVERY_PORT:'0',...env},
+    env:{...process.env,PORT:'0',HOST:'127.0.0.1',OBLOX_DATA_DIR:data,OBLOX_DISCOVERY_PORT:'0',...env,DATABASE_URL:'',OBLOX_REQUIRE_DATABASE:'0'},
     stdio:['ignore','pipe','pipe','ipc']
   });
   children.push(child);
@@ -76,7 +76,7 @@ async function discover(port, nonce) {
     const base = await ready(server);
     await delay(80);
     const health = await (await fetch(base+'/api/health')).json();
-    assert.equal(health.build,'2.1.0'); assert.equal(health.version,2);
+    assert.equal(health.build,require('./package.json').version); assert.equal(health.version,2);
     const found = await discover(discoveryPort,'test_nonce_123');
     assert.equal(found.value.instance_id,health.instance_id); assert.equal(found.value.port,health.port);
     assert.equal(found.value.nonce,'test_nonce_123'); assert.equal(found.remote.address,'127.0.0.1');

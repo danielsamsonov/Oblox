@@ -6,7 +6,13 @@ const pay = require("./payments");
 const community = require("./community")({ clients: () => wss.clients });
 const readBody = require("./http_body");
 const startDiscovery = require("./discovery");
-const BUILD = "2.1.0";
+const BUILD = "2.1.1";
+let storageReady = false;
+community.ready.then(() => {storageReady = true;}, () => {
+  console.error("Oblox community storage startup failed. Check DATABASE_URL and database availability.");
+  process.exitCode = 1;
+  shutdown();
+});
 
 const PORT = Number(process.env.PORT || 8080);
 const ROOM_SIZE = 16;
@@ -99,7 +105,7 @@ function html(res, code, text) {
   res.end(text);
 }
 function health() {
-  return { service: "oblox-community", version: 2, build: BUILD, instance_id: community.instanceId(),
+  return { service: "oblox-community", version: 2, build: BUILD, ready:storageReady && community.isHealthy(), storage:community.storageKind, instance_id: community.instanceId(),
     port: server.address() ? server.address().port : PORT, ws_path: "/ws",
     capabilities: ["accounts", "friends", "published_games", "rooms", "lan_discovery"] };
 }
@@ -108,7 +114,10 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://x");
     const path = url.pathname;
-    if (req.method === "GET" && path === "/api/health") return json(res, 200, health());
+    if (req.method === "GET" && path === "/api/health") {
+      const healthy = storageReady && await community.checkHealth();
+      return json(res, healthy ? 200 : 503, health());
+    }
     if (await community.handle(req, res, url)) return;
     if (req.method === "GET" && (path === "/" || path === "/api/stats")) return json(res, 200, stats());
     if (req.method === "POST" && path === "/api/checkout") {
@@ -165,7 +174,7 @@ wss.on("connection", (c) => {
   const helloTimeout = setTimeout(() => { if (!c.id) c.close(1008, "Send hello first"); }, 10000);
   helloTimeout.unref();
   c.on("pong", () => (c.alive = true));
-  c.on("message", (raw) => {
+  c.on("message", async (raw) => {
     if (++c.msgs > 60) return; // per-second flood limit
     let d;
     try {
@@ -175,14 +184,23 @@ wss.on("connection", (c) => {
     }
     if (!d || typeof d !== "object") return;
     if (d.t === "hello" && !c.id) {
-      const account = d.token ? community.authenticate(d.token) : null;
+      if (c.joining) return;
+      c.joining = true;
+      const world = clean(d.world, 64).toLowerCase();
+      let result;
+      try { result = await community.checkHello(d.token,clean(d.name,20),world); }
+      catch {
+        send(c,{t:"error",code:"storage",error_code:"storage_error",text:"Server storage is temporarily unavailable. Try again later."});
+        return c.close(1013,"Storage unavailable");
+      } finally {c.joining = false;}
+      if (c.readyState !== 1 || c.id) return;
+      const account = result.account;
       if (d.token && !account) return send(c, { t: "error", code: "auth", error_code: "session_expired", text: "Your session expired. Sign in again." }), c.close();
       let name = account ? account.username : clean(d.name, 20);
-      const world = clean(d.world, 64).toLowerCase();
       if (!NAME_RE.test(name) || !ROOM_RE.test(world)) return send(c, { t: "error", text: "bad hello" }), c.close();
-      if (!community.canJoinWorld(world)) return send(c, { t: "error", code: "not_found", text: "This game is not published on this server." }), c.close();
+      if (!result.canJoin) return send(c, { t: "error", code: "not_found", text: "This game is not published on this server." }), c.close();
       // Guests cannot take the name of a registered player.
-      if (!account && community.isRegisteredName(name)) name = "Guest_" + name;
+      if (!account && result.registeredName) name = "Guest_" + name;
       const n = pickServer(world, Math.floor(num(d.server, 100)));
       if (!n) {
         const text = d.server ? "That server is full. Try another one." : "All servers of this game are full.";
@@ -273,7 +291,7 @@ function shutdown() {
   if (discovery) { try { discovery.close(); } catch {} }
   for (const c of wss.clients) c.terminate();
   wss.close();
-  server.close(() => { community.releaseStore(); if (process.connected) process.disconnect(); });
+  server.close(() => { community.releaseStore().finally(() => {if (process.connected) process.disconnect();}); });
   if (server.closeIdleConnections) server.closeIdleConnections();
   setTimeout(() => { community.releaseStore(); process.exit(process.exitCode || 0); }, 1500).unref();
 }

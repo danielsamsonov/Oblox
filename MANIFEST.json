@@ -1,21 +1,22 @@
 {
-  "version": "2.1.0",
+  "version": "2.1.1",
+  "hosting": "Render Free + Neon Free",
   "files": [
     {
       "path": ".gitignore",
-      "sha256": "fd88dde18618261d60eac9134302aa2b34c3e19e8c74fa3cd9788ca9bfebef40"
+      "sha256": "ce9c81a4b6dc7c778ddcb2737d015aa8f82a1ef5f764a45846ecc6a568cc4384"
     },
     {
       "path": "README.md",
-      "sha256": "3bb5776ff3a7a9d52671eda2a0bf3445d7139122882754d25ca4b36fd387ca82"
+      "sha256": "3b3af0d8e832a5a576b62f929c71cdb7a6c0d6694254aa0e56daa61a97356e9f"
     },
     {
       "path": "render.yaml",
-      "sha256": "767fffb5e5ec10d42661ac59326ccefcf319f2f478a91469132a6ed47348cdde"
+      "sha256": "391a247d0465c1146583f67999756801d153546c6cb8a4c729fc5ae85de968a6"
     },
     {
       "path": "server/.dockerignore",
-      "sha256": "a27c92d1fab04f2389f1b68e5f566c36ca04ff4dac24de4a3ce2846fbf80c8ce"
+      "sha256": "8f9cf2fdfd7d56b8785aee03103a77c46413b826621186700d202feab6f1819e"
     },
     {
       "path": "server/bundles.js",
@@ -23,35 +24,39 @@
     },
     {
       "path": "server/client_address.js",
-      "sha256": "d340a33f59e8def8880249215eace2d77543a48feb90a866c5ae28dd8af30c18"
+      "sha256": "36f505985304e53470271798eff8fd7be8fc6568fe14df26c067f845a19aff00"
     },
     {
       "path": "server/CLOUD_DEPLOY_RU.md",
-      "sha256": "3bb5776ff3a7a9d52671eda2a0bf3445d7139122882754d25ca4b36fd387ca82"
+      "sha256": "3b3af0d8e832a5a576b62f929c71cdb7a6c0d6694254aa0e56daa61a97356e9f"
     },
     {
       "path": "server/community.js",
-      "sha256": "41cfc1736c774872d0b7d99e07c5d27f8eb6cf3ccfcfe2110ce83b4b1820b82f"
+      "sha256": "63a58ce28c40a6ac8af79673cf38df7b37de2c30a32d2cf63208872860158472"
+    },
+    {
+      "path": "server/community_store.js",
+      "sha256": "0c8086c70a253b5964dbcb3ae6d9e888d035d9f04dd70da4eade03943e83fa45"
     },
     {
       "path": "server/discovery.js",
-      "sha256": "4daaf7d5904d5ea9cbcec5142a99ef542781b38dc403cc710344c08f661cbc71"
+      "sha256": "4fe454a085f193dc726bcf16c1899c5dc05666af297e5e11f7cd62bdbb87a4dc"
     },
     {
       "path": "server/Dockerfile",
-      "sha256": "a7ea75827e4c510bf26a148c09152ebdd71c832b5a581565083506a489014b49"
+      "sha256": "912f54af6cbd95f2ef0af142cdeb53f6836b3d7d6ae1a43a76e411312003bcc2"
     },
     {
       "path": "server/http_body.js",
-      "sha256": "1d7d09fdfda04c43206ca54c758fde926df4262ed053557b52554fbea869d6bf"
+      "sha256": "aa2fe07dc349f2408d606320a07878bc1262991bae522c004deb974c6d4f31a2"
     },
     {
       "path": "server/package-lock.json",
-      "sha256": "2730e6da38b4ea3a587f4d84ffb5a4733fefa519f9bc076c4a43f1105ce69859"
+      "sha256": "e305e3f271bebc30d9df29f6fa17b746cddef884189739164c76ba0f90ee1649"
     },
     {
       "path": "server/package.json",
-      "sha256": "fb49417eff0bd17be9b7386a02dcaffd3094e5165df9223af90aee2089388841"
+      "sha256": "2ae1dd156a6a9cc4fee4b3ec573bf6bc3cde6e7f9b263cb3e0c726f751869045"
     },
     {
       "path": "server/payments.js",
@@ -59,15 +64,15 @@
     },
     {
       "path": "server/README.md",
-      "sha256": "cfc09ba8c01d2b8a7fa1d4bc7be13aaf43222c7e3adc50f7e512307b613be32b"
+      "sha256": "874c6a1217a275d0b84d0ca5a07cc756199ad24a37879d1c79a9593da6b11843"
     },
     {
       "path": "server/server.js",
-      "sha256": "d3f620f1efb3307b749d72069c15ac659a79efc1442ebd3f2dc8b84f48c8ea1e"
+      "sha256": "1f7286d50da7a43a0863f3321de2c7fca929e2bb938fccd83ad489334b8e2d7d"
     },
     {
       "path": "server/store_lock.js",
-      "sha256": "e53359508c188192b2410b5e7d8862ba9ddd6cf5748b8770526ce3b421664970"
+      "sha256": "0a140c3f1ee46d0b7a1d9a5931ac683b7a26ac9f58a11b217ed5fbe3fb07ce11"
     },
     {
       "path": "server/test_client.js",
@@ -75,13 +80,19 @@
     },
     {
       "path": "server/test_community.js",
-      "sha256": "ec5452abd808ec0a7dc1b535591e70393cf1e05840ab2f2b1fa5485ec72cbb1d"
+      "sha256": "5453e0df89ca73f54e00c86c8927d95f3556c1e0498af36ded7ab2c792d1e7ff"
+    },
+    {
+      "path": "server/test_pg_metrics.js",
+      "sha256": "4768059eccd781cec9dabfcaed4afd487422171d2932a77ea7f8824be5852f6b"
+    },
+    {
+      "path": "server/test_postgres.js",
+      "sha256": "33e88afccbbf17886a3a7e9bbb59e6d125b4cff06a0bffb8225dde226ff0ddbc"
     },
     {
       "path": "server/test_runtime.js",
-      "sha256": "1a6fcdd9d40065d597d0887f2eb2b552a70e4e47b86f4e18469b0b44cca41cd7"
+      "sha256": "7dba5d6e5f152f8cdff1e92ee5a4534c8d37a9adb7e28c22e9a518cd9373eb0f"
     }
-  ],
-  "private_data_included": false,
-  "deployed": false
+  ]
 }
