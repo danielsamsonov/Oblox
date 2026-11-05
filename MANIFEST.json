@@ -1,0 +1,87 @@
+{
+  "version": "2.1.0",
+  "files": [
+    {
+      "path": ".gitignore",
+      "sha256": "fd88dde18618261d60eac9134302aa2b34c3e19e8c74fa3cd9788ca9bfebef40"
+    },
+    {
+      "path": "README.md",
+      "sha256": "3bb5776ff3a7a9d52671eda2a0bf3445d7139122882754d25ca4b36fd387ca82"
+    },
+    {
+      "path": "render.yaml",
+      "sha256": "767fffb5e5ec10d42661ac59326ccefcf319f2f478a91469132a6ed47348cdde"
+    },
+    {
+      "path": "server/.dockerignore",
+      "sha256": "a27c92d1fab04f2389f1b68e5f566c36ca04ff4dac24de4a3ce2846fbf80c8ce"
+    },
+    {
+      "path": "server/bundles.js",
+      "sha256": "a540fd0161ec48c1e100c568fcbd7dfb6e022ce1b0d50ae4a69496ba08812033"
+    },
+    {
+      "path": "server/client_address.js",
+      "sha256": "d340a33f59e8def8880249215eace2d77543a48feb90a866c5ae28dd8af30c18"
+    },
+    {
+      "path": "server/CLOUD_DEPLOY_RU.md",
+      "sha256": "3bb5776ff3a7a9d52671eda2a0bf3445d7139122882754d25ca4b36fd387ca82"
+    },
+    {
+      "path": "server/community.js",
+      "sha256": "41cfc1736c774872d0b7d99e07c5d27f8eb6cf3ccfcfe2110ce83b4b1820b82f"
+    },
+    {
+      "path": "server/discovery.js",
+      "sha256": "4daaf7d5904d5ea9cbcec5142a99ef542781b38dc403cc710344c08f661cbc71"
+    },
+    {
+      "path": "server/Dockerfile",
+      "sha256": "a7ea75827e4c510bf26a148c09152ebdd71c832b5a581565083506a489014b49"
+    },
+    {
+      "path": "server/http_body.js",
+      "sha256": "1d7d09fdfda04c43206ca54c758fde926df4262ed053557b52554fbea869d6bf"
+    },
+    {
+      "path": "server/package-lock.json",
+      "sha256": "2730e6da38b4ea3a587f4d84ffb5a4733fefa519f9bc076c4a43f1105ce69859"
+    },
+    {
+      "path": "server/package.json",
+      "sha256": "fb49417eff0bd17be9b7386a02dcaffd3094e5165df9223af90aee2089388841"
+    },
+    {
+      "path": "server/payments.js",
+      "sha256": "5992aa5d351f7463282ca83894ef91c3ba6dcbae8f61422e3a34d4826c7e7cde"
+    },
+    {
+      "path": "server/README.md",
+      "sha256": "cfc09ba8c01d2b8a7fa1d4bc7be13aaf43222c7e3adc50f7e512307b613be32b"
+    },
+    {
+      "path": "server/server.js",
+      "sha256": "d3f620f1efb3307b749d72069c15ac659a79efc1442ebd3f2dc8b84f48c8ea1e"
+    },
+    {
+      "path": "server/store_lock.js",
+      "sha256": "e53359508c188192b2410b5e7d8862ba9ddd6cf5748b8770526ce3b421664970"
+    },
+    {
+      "path": "server/test_client.js",
+      "sha256": "9b3cc3c16898d47dc1d4631e9c09dc71efb8dc4efa6f27f79019ec8eb5a4324c"
+    },
+    {
+      "path": "server/test_community.js",
+      "sha256": "ec5452abd808ec0a7dc1b535591e70393cf1e05840ab2f2b1fa5485ec72cbb1d"
+    },
+    {
+      "path": "server/test_runtime.js",
+      "sha256": "1a6fcdd9d40065d597d0887f2eb2b552a70e4e47b86f4e18469b0b44cca41cd7"
+    }
+  ],
+  "private_data_included": false,
+  "deployed": false
+}

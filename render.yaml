@@ -1,0 +1,26 @@
+# Optional paid hosting template. Creating the service and disk incurs Render charges.
+# This file has not been deployed. Persistent disk is required for accounts and games.
+services:
+  - type: web
+    name: oblox-server
+    runtime: node
+    plan: 0.5c-512mb
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    disk:
+      name: oblox-community-data
+      mountPath: /var/data/oblox
+      sizeGB: 1
+    envVars:
+      - key: PAYMENTS
+        value: mock
+      - key: OBLOX_DATA_DIR
+        value: /var/data/oblox
+      - key: OBLOX_DISCOVERY_PORT
+        value: "0"
+      - key: TRUST_PROXY_HOPS
+        value: "0"
+      - key: NODE_VERSION
+        value: "24"

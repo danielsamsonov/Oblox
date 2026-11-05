@@ -1,0 +1,13 @@
+node_modules
+logs
+data
+*.log
+*.pid
+*.lock
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+.git
+test_*.js
